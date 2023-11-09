@@ -25,7 +25,7 @@ On to the slides. It is a python script and not actual slides, so they are not a
 
 **Instructions for use:**
 
-If everything works the slides will open automatically when you run the_talk.py (just **python the_talk.py**). If that does not work check the dependencies above. The latex text rendering can be switched on and off using the LATEX=False variable at the top of the_talk.py. Setting it to True will turn on latex rendering. To use it you require latex to be installed on your computer and matplotlib needs to know where to find it.
+If everything works the slides will open automatically when you run the_talk.py (just **python the_talk.py**, or how you like to execute python scripts). If that does not work check the dependencies above. The latex text rendering can be switched on and off using the LATEX=False variable at the top of the_talk.py. Setting it to True will turn on latex rendering. To use it you require latex to be installed on your computer and matplotlib needs to know where to find it.
 
 The script will refuse to run if the matplotlib version is too old.
 
