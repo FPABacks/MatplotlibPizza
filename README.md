@@ -1,7 +1,7 @@
 # MatplotlibPizza
 The terrible script I wrote for the pizza talk on Matplotlib features. 
 
-Because some people were interested: here is the pizza talk on matplotlib. Before I get into the details of the slides: Other people have done a better job at making nice examples than I have in the presentation. So, please have a look at the Matplotlib gallery (at https://matplotlib.org/stable/gallery/index.html) and the book written by Nicolas P. Rougier (available on https://github.com/rougier/scientific-visualization-book). The gallery has more examples than you could possibly dream of, and the book shows off some cool (and possibly unnecessary) features as well as some explanations.
+Because some people were interested: here is the pizza talk on matplotlib. Before I get into the details of the slides: Other people have done a better job at making nice examples than I have in the presentation. So, please have a look at the Matplotlib gallery (at https://matplotlib.org/stable/gallery/index.html) and the book written by Nicolas P. Rougier (available on https://github.com/rougier/scientific-visualization-book). The gallery has more examples than you could possibly dream of, and the book shows off some cool (and possibly unnecessary) features as well as some explanations. Some of the figures featured here are taken from there. 
 
 
 The code is very poorly written and very rushed. Do not use this as an example. It is trash and probably very broken. For good information on how things work and clear examples, the internet and the matplotlib documentation is your friend, check out the gallery and such.
