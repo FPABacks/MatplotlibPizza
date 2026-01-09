@@ -11,7 +11,7 @@ def make_random_figure(ax, number_of_subplot):
     :return:
     """
     # Randomlize the random seed just in case
-    np.random.seed()
+    # np.random.seed()
     fontsize = 15
     # First determine the type of plot
     types = ["colormesh", "scatter", "line", "scatter_and_line", "histogram", "line_profile"]
@@ -110,8 +110,14 @@ def make_random_figure(ax, number_of_subplot):
 
         x_mesh, y_mesh = np.meshgrid(x_points, y_points)
 
-        z_mesh = multivariate_normal.pdf(np.array([x_mesh.reshape(-1), y_mesh.reshape(-1)]).T, mean=np.array([0, 0]),
-                                          cov=np.array([[1, -0.75], [0.75, 1]])).reshape(50,50) * x_mesh**2
+        a, b = np.random.choice(np.arange(1,5), size=2, replace=True)
+
+        type = np.random.choice([1,2])
+        if type == 1:
+            z_mesh = np.sin(a * x_mesh) * np.cos(y_mesh * b) * x_mesh
+        elif type == 2:
+            z_mesh = multivariate_normal.pdf(np.array([x_mesh.reshape(-1), y_mesh.reshape(-1)]).T, mean=np.array([0, 0]),
+                                              cov=np.array([[1, -0.75], [0.75, 1]])).reshape(50,50) * x_mesh**2
 
         # z_mesh = np.sin(x_mesh) * np.cos(y_mesh)
 

@@ -1,19 +1,24 @@
 import numpy as np
 import matplotlib
-# Optional: Ensure right backend is in use. I like using Qt5Agg
-# matplotlib.use("Qt5Agg")
+# Optional: Ensure right backend is in use. I like using Qt5Agg, must happen before importing pyplot...
+matplotlib.use("Qt5Agg")
 import matplotlib.pyplot as plt
 print(f"You are using the {matplotlib.get_backend()} backend.")
-from matplotlib.widgets import RectangleSelector
+from matplotlib.widgets import RectangleSelector, TextBox
 import matplotlib.animation as animation
+import os
+import copy
+
 # Extra scripts
 from ruler import Ruler
 from anatomy_figure import AnatomyFigure
 import simple_nbody_sim as sns
 from random_figure_generator import make_random_figure
 from interactive_line_profiles import InteractivePlot
+from ImageScatter import ImageScatter
 
-LATEX = False
+# Set to false if latex rendering is not an option.
+LATEX = True
 
 # Lazy global fontsize for text on "normal" slides.
 fs = 30
@@ -27,7 +32,7 @@ mpl_version = matplotlib.__version__
 min_version = "3.4.0"
 
 for have, need in zip(mpl_version.split("."), min_version.split(".")):
-    # The version is new, so (probably) fine
+    # The version is newer, so (probably) fine
     if int(have) > int(need):
         break
     elif int(have) < int(need):
@@ -39,9 +44,9 @@ for have, need in zip(mpl_version.split("."), min_version.split(".")):
 class ThePresentation:
 
     def __init__(self, start_slide=0, allow_latex=True):
-
         """
-        Initialize the figure and all corresponding required widgets
+        Initialize the figure and all corresponding required widgets, can determine the starting slide and if latex
+        text rendering is allowed. Latex text rendering is more flexible and can look better but is quite a bit slower.
         """
         self.current_slide = start_slide
         self.allow_latex = allow_latex
@@ -53,6 +58,9 @@ class ThePresentation:
         self.switch_serif()
         self.ax = None
         self.dark_theme = False
+        self.xkcd = False
+
+        self.click_loc = (0,0)  # Location of clicks for title slide
 
         # The particles in the N-body animation. First entry is a dummy point
         objects = np.array([[10**10, 0.35, 0.65],    # x
@@ -64,24 +72,36 @@ class ThePresentation:
         # The functions for each "slide" in a dictionary, waiting to be called.
         self.slide_dict = {0: self.title_slide,
                            1: self.basics_slide,
-                           2: self.figsize_slide,
-                           3: self.subplots_slide,
-                           4: self.subplots_slide2,
-                           5: self.slider_slide,
-                           6: self.more_tips_slide,
-                           7: self.histogram_example_slide,
-                           8: self.vector_vs_raster,}
+                           2: self.chatGPT_basics,
+                           3: self.figsize_slide,
+                           4: self.subplots_slide,
+                           5: self.subplots_slide2,
+                           6: self.slider_slide,
+                           7: self.more_tips_slide,
+                           8: self.histogram_example_slide,
+                           9: self.vector_vs_raster,
+                           10: self.table_slide,
+                           11: self.bird_plot,}
 
         # Some slides use some extra info that is nice to store
         self.slide_info = {0: objects,
                            1: (),
                            2: (),
-                           3: 0,
+                           3: (),
                            4: 0,
-                           5: (),
-                           6: 0,
-                           7: [[], [], []],
-                           8: 0,}
+                           5: 0,
+                           6: (),
+                           7: 0,
+                           8: [[], [], []],
+                           9: 0,
+                           10: [],
+                           11: []}
+
+        self.hist_updates = [self.update_hist1, self.update_hist2, self.update_hist3, self.update_hist4,
+                             self.update_hist5, self.update_hist6, self.update_hist7, self.update_hist8,
+                             self.update_hist9]
+
+        self.textbox_axes = []
 
         # OPTIONAL: Have n bodies rotating in a orbit together.
         # n_points = 3
@@ -93,10 +113,11 @@ class ThePresentation:
         # m = np.ones(n_points) * 100
 
         # Connect the different key presses
-        self.fig.canvas.mpl_connect('key_press_event', self.on_press)
+        self.switcher = self.fig.canvas.mpl_connect('key_press_event', self.on_press)
 
         # Changes the speed (and accuracy) of the animation
-        self.anim_dt = 0.5
+        self.anim_dt = 20
+        self.anim_substeps = 100
         self.slide_dict[self.current_slide]()
 
         plt.show()
@@ -108,10 +129,14 @@ class ThePresentation:
         :return: nothing
         """
         print(f"Pressed key: {event.key}")
+        if event.inaxes in self.textbox_axes:
+            return
         if event.key == "e":
             self.switch_latex()
         elif event.key == "w":
             self.switch_serif()
+        elif event.key == "x":
+            self.switch_xkcd()
         elif event.key == "r":
             self.redraw_figure()
         elif event.key == "right":
@@ -119,20 +144,23 @@ class ThePresentation:
             self.stop_animation()
             if self.slide_dict[self.current_slide] == self.title_slide:
                 self.fig.canvas.mpl_disconnect(self.grav_click)
+                self.fig.canvas.mpl_disconnect(self.grav_release)
+
+            if self.slide_dict[self.current_slide] == self.slider_slide:
+                self.disconnect_sliders()
             # elif self.slide_dict[self.current_slide - 1] == self.subplots_slide:
             try:
                 self.fig.canvas.mpl_disconnect(self.ax_selector)
             except AttributeError:
                 print("Nothing to disconnect!")
 
-            self.current_slide += 1
-            self.fig.clf()
-            self.slide_dict[self.current_slide]()
+            if self.current_slide < len(self.slide_dict) - 1:
+                self.current_slide += 1
+                self.fig.clf()
+                self.slide_dict[self.current_slide]()
 
-            # These lines make sure the new things are drawn on the slide after a change.
-            # These lines will appear many times
-            self.fig.canvas.draw()
-            self.fig.canvas.flush_events()
+            else:
+                print("This is the last slide!")
 
         elif event.key == "left":
             if self.current_slide > 0:
@@ -141,6 +169,10 @@ class ThePresentation:
 
                 if self.slide_dict[self.current_slide] == self.title_slide:
                     self.fig.canvas.mpl_disconnect(self.grav_click)
+                    self.fig.canvas.mpl_disconnect(self.grav_release)
+
+                if self.slide_dict[self.current_slide] == self.slider_slide:
+                    self.disconnect_sliders()
                 # elif self.slide_dict[self.current_slide + 1] == self.subplots_slide:
                 try:
                     self.fig.canvas.mpl_disconnect(self.ax_selector)
@@ -151,15 +183,11 @@ class ThePresentation:
                 self.current_slide -= 1
                 self.slide_dict[self.current_slide]()
 
-                self.fig.canvas.draw()
-                self.fig.canvas.flush_events()
-
         elif event.key == " ":
             self.next_step()
+
         elif event.key == "z":
             self.ruler = Ruler(self.fig)
-            self.fig.canvas.draw()
-            self.fig.canvas.flush_events()
 
         elif event.key == "d":
             if self.dark_theme:
@@ -170,8 +198,14 @@ class ThePresentation:
                 self.fig.set_facecolor("k")
 
             self.dark_theme = not self.dark_theme
-            self.fig.canvas.draw()
-            self.fig.canvas.flush_events()
+        elif event.key in ["2", "3", "4", "5", "6", "7", "8", "9"]:
+            self.circle_orbit(int(event.key))
+
+        else:  # Leave if the key presses have done nothing
+            return
+        # Redraw if the key presses might have done something.
+        self.fig.canvas.draw()
+        self.fig.canvas.flush_events()
 
     def stop_animation(self):
         """
@@ -182,6 +216,19 @@ class ThePresentation:
             self.ani.event_source.stop()
         except AttributeError:
             pass
+
+    def disconnect_sliders(self):
+        """Dist connects the sliders"""
+        IP = self.slide_info[self.current_slide]
+        buttons = IP.radio_buttons
+        sliders = IP.sliders
+        self.fig.canvas.mpl_disconnect(buttons)
+        for slider in sliders:
+            self.fig.canvas.mpl_disconnect(slider)
+        for ax in IP.axarr:
+            ax.remove()
+        for ax in IP.sliderAxes:
+            ax.remove()
 
     def next_step(self):
         """
@@ -202,24 +249,8 @@ class ThePresentation:
             if self.step == 1:
                 self.ruler = Ruler(self.fig)
         elif self.slide_dict[self.current_slide] == self.histogram_example_slide:
-            if self.step == 1:
-                self.update_hist1()
-            elif self.step == 2:
-                self.update_hist2()
-            elif self.step == 3:
-                self.update_hist3()
-            elif self.step == 4:
-                self.update_hist4()
-            elif self.step == 5:
-                self.update_hist5()
-            elif self.step == 6:
-                self.update_hist6()
-            elif self.step == 7:
-                self.update_hist7()
-            elif self.step == 8:
-                self.update_hist8()
-            elif self.step == 9:
-                self.update_hist9()
+            if self.step <= 9:
+                self.hist_updates[self.step - 1]()
 
         self.fig.canvas.draw()
         self.fig.canvas.flush_events()
@@ -232,6 +263,7 @@ class ThePresentation:
         print(f"Redrawing slide number: {self.current_slide}")
         print(f"Using LateX: {self.latex}")
         print(f"Using serif fonts: {self.serif}")
+        self.stop_animation()
         plt.clf()
         self.slide_dict[self.current_slide]()
 
@@ -249,8 +281,6 @@ class ThePresentation:
         elif self.allow_latex:
             plt.rcParams['text.usetex'] = self.latex
             print(f"Using Latex: {self.latex}")
-        self.fig.canvas.draw()
-        self.fig.canvas.flush_events()
 
     def switch_serif(self):
         """
@@ -259,14 +289,31 @@ class ThePresentation:
         """
         self.serif = not self.serif
         if self.serif:
-            plt.rcParams["font.family"] = "Serif"
+            plt.rcParams["font.family"] = "serif"
         else:
-            plt.rcParams["font.family"] = "Sans-Serif"
+            plt.rcParams["font.family"] = "sans-serif"
 
         print(f"Using Serif: {self.serif}")
 
-        self.fig.canvas.draw()
-        self.fig.canvas.flush_events()
+    def switch_xkcd(self):
+        """Switches between XKCD style and default."""
+        if self.xkcd:
+            # plt.rcParams = copy.deepcopy(default_rc)
+            matplotlib.style.use("default")
+            plt.rc("xtick", labelsize=15)
+            plt.rc("ytick", labelsize=15)
+            plt.rc("font", size=20)
+            plt.rcParams['text.usetex'] = self.latex
+
+            if self.serif:
+                plt.rcParams["font.family"] = "serif"
+            else:
+                plt.rcParams["font.family"] = "sans-serif"
+        else:
+            plt.rcParams['text.usetex'] = False
+            plt.xkcd()
+
+        self.xkcd = not self.xkcd
 
     def title_slide(self):
         """
@@ -285,13 +332,13 @@ class ThePresentation:
         self.ax.set_ylim(0, 1)
 
         # Connect widget to the function that adds the new points to the N-body
-        self.grav_click = self.fig.canvas.mpl_connect('button_press_event', self.onclick_grav)
+        self.grav_click = self.fig.canvas.mpl_connect("button_press_event", self.add_grav_particle1)
+        self.grav_release = self.fig.canvas.mpl_connect("button_release_event", self.add_grav_particle2)
 
         self.scatter_points = []
         for i in range(len(self.slide_info[self.current_slide][0])):
             x = self.slide_info[self.current_slide][0, i]
             y = self.slide_info[self.current_slide][1, i]
-            print(x, y)
             color = np.random.random(size=3)
             self.scatter_points.append(self.ax.scatter(x, y, color=color, edgecolor=color * 0.5, s=500,
                                                        linewidths=3, clip_on=True))
@@ -304,19 +351,30 @@ class ThePresentation:
         # Start the animation
         self.ani = animation.FuncAnimation(self.fig, self.animate_grav, interval=1, blit=True)
 
-    def onclick_grav(self, event):
-        """
-        Add a body to the N-body simulator
-        :param event:
-        :return:
-        """
+
+    def add_grav_particle1(self, event):
+        """Initiates the adding of a particle in the N-body simulator"""
         toolbar = plt.get_current_fig_manager().toolbar
         if event.button == 1 and toolbar.mode == "" and event.key != "shift" and event.inaxes == self.ax:
             x = event.xdata
             y = event.ydata
-            vx = np.random.uniform(-0.0002, 0.0002)
-            vy = np.random.uniform(-0.0002, 0.0002)
+            self.click_loc = (x, y)
+
+    def add_grav_particle2(self, event):
+        """ Adds a new particle in the N-body simulator, the difference in click location and release location affects
+         the velocity of the particle. """
+        toolbar = plt.get_current_fig_manager().toolbar
+        if event.button == 1 and toolbar.mode == "" and event.key != "shift" and event.inaxes == self.ax:
+            x = event.xdata
+            y = event.ydata
+            x2, y2 = self.click_loc
+            vx = (x2 - x) * 0.001
+            vy = (y2 - y) * 0.001
+            if abs(vx) < 0.00005 and abs(vy) < 0.00005:
+                vx += + np.random.uniform(-0.0001, 0.0001)
+                vy += + np.random.uniform(-0.0001, 0.0001)
             m = 100
+            # Add the new particle to the collection
             objects = np.concatenate((self.slide_info[self.current_slide],
                                        [[x], [y], [vx], [vy], [m]]), axis=1)
             self.slide_info[self.current_slide] = objects
@@ -326,6 +384,29 @@ class ThePresentation:
             self.scatter_points.append(self.ax.scatter(x, y, color=color, edgecolor=color * 0.5, s=500,
                                                        linewidths=3, clip_on=True))
 
+    def circle_orbit(self, n_points):
+        """
+        replaces the current objects in the N-body simulator with objects placed in a circle orbiting around a shared
+        center of mass.
+        :return:
+        """
+        angles = np.linspace(0, np.pi * 2, n_points, endpoint=False)
+        x = np.cos(angles) * 0.25 + 0.5
+        y = np.sin(angles) * 0.25 + 0.5
+        vbase = 0.00009 * n_points * 0.3
+        vx = np.sin(angles) * vbase
+        vy = -np.cos(angles) * vbase
+        m = np.ones(n_points) * 100
+
+        objects = np.array([x,  # x
+                            y,  # y
+                            vx,  # vx
+                            vy,  # vy
+                            m])  # mass
+        self.slide_info[0] = objects
+        self.redraw_figure()
+
+
     def animate_grav(self, t):
         """
         calculates the next step in the animation.
@@ -334,8 +415,9 @@ class ThePresentation:
         indices = []
         # Update locations, only if there are points to show. (There is one dummy point)
         if len(self.slide_info[self.current_slide][0]) > 1:
-            for i in range(50):  # Integrate 50 steps before drawing the new location of the points.
-                self.slide_info[self.current_slide] = sns.rk4(self.slide_info[self.current_slide], self.anim_dt)
+            for i in range(self.anim_substeps):  # Integrate 50 steps before drawing the new location of the points.
+                self.slide_info[self.current_slide] = sns.rk4(self.slide_info[self.current_slide],
+                                                              self.anim_dt / self.anim_substeps)
 
             # Select points that are still to be kept (runaway points are deleted)
             sel = ((self.slide_info[self.current_slide][0] < 10) *
@@ -349,7 +431,7 @@ class ThePresentation:
         # Remove points that have escaped. In inverse order to not mess up because of pop.
         for i in sorted(indices)[::-1]:
             self.scatter_points[i].remove()  # Removes the scatter point
-            self.scatter_points.pop(i)  # Removes the left over None
+            self.scatter_points.pop(i)  # Removes the leftover None
 
         # Update plotted locations
         for i, point in enumerate(self.scatter_points):
@@ -378,6 +460,72 @@ class ThePresentation:
         self.fig.subplots_adjust(0.6, 0.2, 0.9, 0.8)
 
         self.anafig = AnatomyFigure(self.fig, self.ax)
+        
+    def chatGPT_basics(self):
+        """The basic anatomy of a figure according to chatGPT"""
+
+        self.fig.text(0.5, 0.85, "The anatomy of a figure according to chatGPT", ha="center", va="center")
+        ax = self.fig.add_axes([0.3, 0.2, 0.5, 0.5])
+
+        # The code below is generated by chatGPT
+
+        # Simple plot
+        ax.plot([0, 1], [0, 1], label="Line")
+        ax.legend()
+
+        # Labels and title
+        ax.set_xlabel("X-axis label")
+        ax.set_ylabel("Y-axis label")
+        ax.set_title("Figure Anatomy Demonstration")
+
+        # Grid
+        ax.grid(True)
+
+        # Annotate major elements
+        annotations = [
+            ("Figure", (0.5, 1.02), (0.8, 1.12)),
+            ("Axes", (0.5, 0.5), (0.2, 0.7)),
+            ("Title", (0.5, 1.0), (0.2, 1.07)),
+            ("X-axis", (0.5, 0.0), (0.7, -0.15)),
+            ("Y-axis", (0.0, 0.5), (-0.25, 0.55)),
+            ("X-axis label", (0.5, -0.08), (0.15, -0.20)),
+            ("Y-axis label", (-0.08, 0.5), (-0.35, 0.75)),
+            ("Tick", (0.1, 0.0), (0.1, -0.12)),
+            ("Tick label", (0.2, 0.0), (0.2, -0.20)),
+            ("Grid", (0.3, 0.3), (0.15, 0.25)),
+            ("Legend", (0.85, 0.85), (1.05, 0.95)),
+        ]
+
+        for text, xy, xytext in annotations:
+            ax.annotate(
+                text,
+                xy=xy,
+                xycoords="axes fraction",
+                xytext=xytext,
+                textcoords="axes fraction",
+                arrowprops=dict(arrowstyle="->"),
+                ha="center"
+            )
+
+        # Annotate spines manually near edges
+        spine_positions = {
+            "left spine": (0, 0.5, -0.15, 0.5),
+            "right spine": (1, 0.5, 1.15, 0.5),
+            "bottom spine": (0.5, 0, 0.5, -0.15),
+            "top spine": (0.5, 1, 0.5, 1.10)
+        }
+
+        for label, (x, y, xt, yt) in spine_positions.items():
+            ax.annotate(
+                label,
+                xy=(x, y),
+                xycoords="axes fraction",
+                xytext=(xt, yt),
+                textcoords="axes fraction",
+                arrowprops=dict(arrowstyle="->"),
+                ha="center"
+            )
+
 
     def figsize_slide(self):
         """
@@ -522,7 +670,7 @@ class ThePresentation:
         self.fig.text(0.075, 0.5, r"Experiment with borders and outlines, e.g. \texttt{edgecolor}", ha="left", fontsize=fs)
         self.fig.text(0.075, 0.4, r"Experiment with background lines that guide the eye", ha="left", fontsize=fs)
         self.fig.text(0.075, 0.3, r"Set the \texttt{zorder} of elements in your figure", fontsize=fs)
-        self.fig.text(0.075, 0.2, r"But be consistent! Make the style mean the same thing.", fontsize=fs)
+        self.fig.text(0.075, 0.2, r"But be consistent! Make the style mean the same thing everywhere.", fontsize=fs)
 
     def histogram_example_slide(self):
         """
@@ -810,7 +958,7 @@ class ThePresentation:
         data1, data2, data3 = self.slide_info[self.current_slide][0]
 
         ax1.remove()
-        ax1 = self.fig.add_axes([0.65, 0.25, 0.30, 0.50])
+        ax1 = self.fig.add_axes((0.65, 0.25, 0.30, 0.50))
 
         decent_bins = self.slide_info[self.current_slide][2]
         ax1.hist(data1, density=True, bins=decent_bins, label="Data 1",
@@ -868,7 +1016,121 @@ class ThePresentation:
         slider_plot = InteractivePlot(self.fig, line_profiles, param_vals,
                  ["a", "b", "c", "d"], [a, b, c, d], line_names)
 
+        self.slide_info[self.current_slide] = slider_plot
         slider_plot.init_plot()
 
+    def table_slide(self):
+        """
+        Makes a latex rendered table, because why not.
+        It will not work if latex rendering is not possible.
+        """
 
-pres = ThePresentation(start_slide=0, allow_latex=LATEX)
+        if not self.latex:
+            self.fig.text(0.5, 0.8, "This would have been showing a nice latex table if you could render it.",
+                          ha="center", va="center")
+        else:
+            self.fig.text(0.5, 0.8, "You can also make \LaTeX\ tables!", fontsize=fs, ha="center", va="center")
+
+        data_shape = (6,4)
+        numbers = np.random.random(data_shape) * 10
+        min_errs = np.abs(np.random.normal(size=data_shape) * numbers * 0.1)
+        max_errs = np.abs(np.random.normal(size=data_shape) * numbers * 0.1)
+        row_names = ["QuadraticPeople", "TinyThings", "PurpleBricks", "SignificantShoelaces", "BlindPotatoes", "Stuff"]
+
+        table_text = r"\begin{tabular}{l|cccc} \hline \hline "
+        table_text += (r"{\bf Originality} & {\bf Words are hard} & {\bf There are many words} "
+                       r"& {\bf The color green} & {\bf Something clever} \rule{0pt}{2.6ex} \\ \hline ")
+
+        if not self.latex:  # Adding lines to show what the input is like when not latex rendering.
+            table_text += "\n"
+        for row in range(data_shape[0]):
+            table_text += rf"{row_names[row]} "
+            for col in range(data_shape[1]):
+                table_text += fr"& ${numbers[row][col]:.2f}_{{-{min_errs[row][col]:.2f}}}^{{+{max_errs[row][col]:.2f}}}$ "
+            table_text += r" \\"
+            if not self.latex:
+                table_text += "\n"  # Just for the non latex render
+        table_text += r"\hline \end{tabular}"
+
+        self.fig.text(0.5, 0.5, table_text, ha='center', va='center')
+
+    def bird_plot(self):
+        """
+        Shows that you can make anything you want. Even birds as scatter points.
+        """
+        # self.fig.canvas.mpl_disconnect(self.switcher)
+
+        n = 12
+        x = np.random.uniform(4.5, 6, size=(3,n))
+        y1 = x[0] * 0.5 - 9 + np.random.normal(size=n) / 10
+        y2 = x[1] * 0.8 - 11 + np.random.normal(size=n) / 10
+        y3 = x[2] * 0.7 - 10 + np.random.normal(size=n) / 10
+
+        ax = self.fig.add_axes((0.1, 0.1, 0.5, 0.6))
+        self.fig.text(0.5, 0.85, "The magic or markers", fontsize=fs, ha="center", va="center")
+        ax.scatter(x[0], y1, c="cornflowerblue", label="Pancakes", s=100)
+        ax.scatter(x[1], y2, c="crimson", label="Giraffes", s=100)
+        ax.scatter(x[2], y3, c="goldenrod", label="The letter L", s=100)
+        ax.set_xlabel("Pasta eaten")
+        ax.set_ylabel("Density")
+        ax.legend(loc="upper left")
+        ax.set_xlim(4.4, 6.1)
+        ax.set_ylim(-7.5, -5.7)
+
+
+        box1 = self.fig.add_axes((0.72, 0.55, 0.25, .1))
+        box2 = self.fig.add_axes((0.72, 0.45, 0.25, .1))
+        box3 = self.fig.add_axes((0.72, 0.35, 0.25, .1))
+        self.textbox_axes = [box1, box2, box3]
+
+        textbox1 = TextBox(box1, "Marker 1")
+        textbox2 = TextBox(box2, "Marker 2")
+        textbox3 = TextBox(box3, "Marker 3")
+
+        textbox1.on_submit(self.any_markers)
+        textbox2.on_submit(self.any_markers)
+        textbox3.on_submit(self.any_markers)
+        self.text_boxes = [textbox1, textbox2, textbox3]
+
+        self.slide_info[self.current_slide] = [ax, x, (y1, y2, y3), ("Pancakes", "Giraffes", "The letter L")]
+
+    def any_markers(self, expression):
+        """
+        Shows that you can put anything as marker, if you really want.
+        """
+        ax = self.slide_info[self.current_slide][0]
+        x, y, labels = self.slide_info[self.current_slide][1:]
+
+
+        ax.cla()
+        ax.set_xlabel("Pasta eaten")
+        ax.set_ylabel("Density")
+        ax.set_xlim(4.4, 6.1)
+        ax.set_ylim(-7.5, -5.7)
+        img_ax = ImageScatter(ax)
+
+        for i, text_box in enumerate(self.text_boxes):
+            marker = text_box.text_disp._text
+            if os.path.exists(f"images/{marker}.png"):
+                marker = f"images/{marker}.png"
+            elif marker == "":
+                marker = "o"
+
+            if "images" in marker:
+                img_ax.scatter(x[i], y[i], marker, label=f"Dataset {i}", zoom=0.075)
+            else:
+                try:
+                    ax.scatter(x[i], y[i], marker=marker, label=f"Dataset {i}", s=100)
+                except:
+                    ax.scatter(x[i], y[i], marker=f"${marker}$", label=f"Dataset {i}", s=100)
+
+        img_ax.legend(loc="upper left")
+        self.fig.canvas.draw()
+
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--ss", type=int, default=0, help="Start slide of the presentation")
+    args = parser.parse_args()
+    pres = ThePresentation(start_slide=args.ss, allow_latex=LATEX)

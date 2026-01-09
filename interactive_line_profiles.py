@@ -90,7 +90,7 @@ class InteractivePlot:
             row = i // self.slide_cols
 
             # Create an axis for each of the sliders
-            ax = plt.axes([0.05 + col * (self.length + self.h_space),
+            ax = self.fig.add_axes([0.05 + col * (self.length + self.h_space),
                            self.slide_top - row * (self.v_space + self.width),
                            self.length,
                            self.width])
@@ -116,10 +116,10 @@ class InteractivePlot:
         :return:
         """
         # Define the box in which the buttons will be displayed
-        rax = plt.axes([0.05 + self.slide_cols * (self.length + self.h_space),
-                        0.02,
-                        0.125 * (9 / 16),
-                        0.125])
+        rax = self.fig.add_axes((0.05 + self.slide_cols * (self.length + self.h_space),
+                                 0.02,
+                                 0.125 * (9 / 16),
+                                 0.125))
         # Add a button that says None to only show the specified parameters
         # Assume last parameter is vsini which is calculated on the fly, so leave that out
         button_names = ["None"] + self.parameter_names
@@ -138,9 +138,9 @@ class InteractivePlot:
         self.axarr = []
         for i in range(4):
             if i > 0:
-                self.axarr.append(plt.subplot(gs[i,0], sharex=self.axarr[-1]))
+                self.axarr.append(self.fig.add_subplot(gs[i,0], sharex=self.axarr[-1]))
             else:
-                self.axarr.append(plt.subplot(gs[i,0]))
+                self.axarr.append(self.fig.add_subplot(gs[i,0]))
 
         self.axarr.append(plt.subplot(gs[:,1], aspect=1))
         # self.axarr = plt.add_subplot
@@ -204,7 +204,8 @@ class InteractivePlot:
 
         # gs.tight_layout(rect=[0.05, 0.20, 0.95, 0.90])
 
-        plt.show()
+        # plt.show()
+        # plt.draw()
 
     def add_line(self, line, wave, flux):#, line_name, vsini):
         """
