@@ -30,13 +30,13 @@ The script will refuse to run if the matplotlib version is too old.
 
 You can move between slides by using the arrow keys. "right arrow" goes to the next slide, "left arrow" to the previous slide. On some slides, there are some additional things that can change using space. These "steps" are one way only, and can only be reset by going to a different slide and back. I could not be bothered to include a previous step button. Bugs and problems can occur if you move through the slides too quickly.
 
-There are several other buttons that do things:
+There are several other buttons that do things, many of these require a redraw (with "r" to make it work (more) properly):
 
 - "e" switches between latex and non-latex rendering (if allowed by LATEX) (note: pretty jank)
 
 - "w" switches between serif and sans-serif fonts (note: pretty jank)
 
-- "r" redraws the current slide. (Can also be pretty jank, can also reset the latex rendering and serif fonts, depending on the slide, probably not very functional anymore.)
+- "r" redraws the current slide. (Can also be pretty jank) 
 
 - "z" adds the ruler background to the slide. (takes a second)
 
