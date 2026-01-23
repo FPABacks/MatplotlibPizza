@@ -8,7 +8,7 @@ The code is very poorly written and very rushed. Do not use this as an example. 
 On to the slides. It is a python script and not actual slides, so they are not as portable. The code is very poorly written and rushed. Do not use this as an example of how to do things in python/matplotlib. It is mostly recycled and repurposed bits of code that I wrote years ago, or stole from Nicholas' book. 
 
 
- There are some complications:
+**There are some complications:**
 
 - It requires at least matplotlib version 3.4.0, but newer is typically better (at the time of writing).
 
@@ -22,7 +22,7 @@ On to the slides. It is a python script and not actual slides, so they are not a
 
 - There is a decent chance that matplotlib-backend related issues occur. 
 
-Instructions for use:
+**Instructions for use:**
 
 If everything works, the slides will open automatically when you run the_talk.py (just python the_talk.py). If that does not work, check the dependencies above. The latex text rendering can be switched on and off using the LATEX=False variable at the top of the_talk.py. Setting it to True will turn on latex rendering. To use it, you require latex to be installed on your computer and matplotlib needs to know where to find it.
 
@@ -47,7 +47,7 @@ There are several other buttons that do things:
 Next to that, there are the standard built in keys shortcuts: "q" closes the figure, "p" allows panning, "o" switches to selecting boxes to zoom into, "f" switches to full screen, "k" and "l" switch axes scales between log and linear scale of the x and y axis. These might be backend dependent, I don't know.
 
 
-Instructions per slide:
+**Instructions per slide:**
 
 0. "Title slide" N-body simulation/animation. You can left click in the figure to add extra bodies. The bodies have a small random velocity. Click drag and release to shoot the particle in the direction you dragged from.  
 
