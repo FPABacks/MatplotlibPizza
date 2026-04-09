@@ -55,7 +55,7 @@ class ImgHandler(HandlerBase):
         ncols = np.sum(cols_sel)
         if ncols > nrows:
             diff = ncols - nrows
-            add = np.zeros((ncols, diff // 2, 4))
+            add = np.zeros((diff // 2, ncols, 4))
             data = np.concatenate((add, data, add), axis=0)
         elif nrows > ncols:
             diff = nrows - ncols
@@ -148,9 +148,9 @@ if __name__ == '__main__':
     # Test case to see if it works:
 
     # Image paths
-    vink_path = "vink.png"
-    robin_path = "robin.png"
-    chickadee_path = "chickadee.png"
+    vink_path = "images/vink.png"
+    robin_path = "images/robin.png"
+    chickadee_path = "images/chickadee.png"
 
     # Generate some test data
     n = 12
